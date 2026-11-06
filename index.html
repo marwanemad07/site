@@ -181,11 +181,11 @@ function lessonsView(){
 }
 function openLesson(l){
  const ov=document.createElement("div");ov.className="ov";
- ov.innerHTML=`<div class="box"><h3>إعلان</h3><div class="ad">مساحة إعلانية<br>الدرس يبدأ بعد <span id="cd">15</span> ثانية</div><small>الإعلان يدعم فريق العمل 💙</small></div>`;
  document.body.appendChild(ov);
- let s=15;const iv=setInterval(()=>{s--;ov.querySelector("#cd").textContent=s;
-  if(s<=0){clearInterval(iv);ov.innerHTML=`<div class="box" style="max-width:700px;text-align:right;max-height:85vh;overflow:auto"><h2>${esc(l.title)}</h2><div style="white-space:pre-wrap;line-height:1.9">${esc(l.content)}</div><br><button id="cl">إغلاق</button></div>`;ov.querySelector("#cl").onclick=()=>ov.remove()}
- },1000);
+ const show=()=>{ov.innerHTML=`<div class="box" style="max-width:700px;text-align:right;max-height:85vh;overflow:auto"><h2>${esc(l.title)}</h2><div style="white-space:pre-wrap;line-height:1.9">${esc(l.content)}</div><br><button id="cl">إغلاق</button></div>`;ov.querySelector("#cl").onclick=()=>ov.remove()};
+ if(isAdmin()){show();return}
+ ov.innerHTML=`<div class="box"><h3>إعلان</h3><div class="ad">مساحة إعلانية<br>الدرس يبدأ بعد <span id="cd">15</span> ثانية</div><small>الإعلان يدعم فريق العمل 💙</small></div>`;
+ let s=15;const iv=setInterval(()=>{s--;ov.querySelector("#cd").textContent=s;if(s<=0){clearInterval(iv);show()}},1000);
 }
 
 /* ===== التقديم على الإدارة ===== */
