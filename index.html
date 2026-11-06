@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>منصة الشروحات</title>
+<style>
+:root{--side:#0f172a;--bg:#f4f6fb;--card:#fff;--pri:#4f46e5;--txt:#0f172a;--mut:#64748b;--bd:#e5e7eb;--red:#ef4444}
+*{box-sizing:border-box;font-family:Tahoma,Arial,sans-serif}
+body{margin:0;background:var(--bg);color:var(--txt);display:flex;min-height:100vh}
+#side{width:260px;background:var(--side);color:#cbd5e1;display:flex;flex-direction:column;position:fixed;top:0;bottom:0;right:0;overflow:auto}
+#side .me{padding:18px;border-bottom:1px solid #1e293b;font-size:14px}
+#side .me b{color:#fff;display:block}
+#side nav{padding:10px;flex:1}
+#side a{display:block;padding:12px 14px;border-radius:10px;cursor:pointer;margin-bottom:4px;font-size:15px}
+#side a:hover{background:#1e293b}
+#side a.on{background:#1e293b;color:#fff;border:1px solid #334155}
+#side .foot{padding:12px;border-top:1px solid #1e293b}
+#side input{width:100%;padding:8px;border-radius:8px;border:1px solid #334155;background:#1e293b;color:#fff;margin-bottom:6px}
+.out{color:#f87171!important}
+main{margin-right:260px;flex:1;padding:24px;max-width:1000px}
+.card{background:var(--card);border-radius:14px;border:1px solid var(--bd);padding:18px;margin-bottom:16px}
+h2{margin-top:0}
+button{background:var(--pri);color:#fff;border:0;border-radius:8px;padding:9px 16px;cursor:pointer;font-size:14px}
+button.s{padding:3px 8px;font-size:12px;background:#e2e8f0;color:#334155}
+button.r{background:var(--red);color:#fff}
+input,textarea{width:100%;padding:10px;border:1px solid var(--bd);border-radius:8px;margin-bottom:8px}
+#msgs{height:55vh;overflow:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
+.m{background:#f1f5f9;border-radius:10px;padding:8px 12px}
+.m .n{font-weight:bold;font-size:13px;color:var(--pri)}
+.m .t{display:flex;gap:4px;margin-top:4px}
+.lesson{padding:14px;border:1px solid var(--bd);border-radius:10px;margin-bottom:8px;cursor:pointer}
+.lesson:hover{background:#f8fafc}
+.ov{position:fixed;inset:0;background:#000c;display:flex;align-items:center;justify-content:center;z-index:9}
+.ov .box{background:#fff;border-radius:14px;padding:30px;text-align:center;max-width:420px}
+.ad{background:linear-gradient(135deg,#4f46e5,#9333ea);color:#fff;border-radius:12px;padding:40px 20px;margin:14px 0;font-size:20px}
+#login{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:20}
+#login .card{width:360px;text-align:center}
+.hide{display:none!important}
+.err{color:var(--red);font-size:13px}
+@media(max-width:700px){#side{position:static;width:100%}body{flex-direction:column}main{margin:0}}
+</style>
+</head>
+<body>
+
+<div id="login">
+ <div class="card">
+  <h2>منصة الشروحات</h2>
+  <div id="step1"><p>سجّل دخولك بحساب جوجل</p><button onclick="loginG()">الدخول بجيميل</button></div>
+  <div id="step2" class="hide">
+   <p>اختر اسمك (حروف فقط، بدون رموز أو أرقام)</p>
+   <input id="nm" maxlength="20" placeholder="اسمك">
+   <button onclick="saveName()">حفظ ودخول</button>
+  </div>
+  <p class="err" id="lerr"></p>
+ </div>
+</div>
+
+<aside id="side" class="hide">
+ <div class="me"><b id="meName"></b><span id="meRole"></span></div>
+ <nav id="nav"></nav>
+ <div class="foot">
+  <input id="code" placeholder="كود الأدمن">
+  <button onclick="useCode()" style="width:100%">تفعيل</button>
+  <a class="out" onclick="logout()" style="margin-top:8px">تسجيل الخروج</a>
+ </div>
+</aside>
+
+<main id="main" class="hide"></main>
+
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import {getAuth,GoogleAuthProvider,signInWithPopup,onAuthStateChanged,signOut} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import {getFirestore,doc,getDoc,setDoc,deleteDoc,addDoc,collection,query,orderBy,limit,where,onSnapshot,getDocs,serverTimestamp} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+/* ====== ضع إعدادات Firebase بتاعتك هنا ====== */
+const firebaseConfig={apiKey:"AIzaSyBk-KXQJ-Wuflr-2ZQsxaFN9jEQfXmlClc",authDomain:"share-f150c.firebaseapp.com",projectId:"share-f150c",storageBucket:"share-f150c.firebasestorage.app",messagingSenderId:"861894276415",appId:"1:861894276415:web:1e653659b2b6d10e1f4f8a"};
+/* هاش SHA-256 لكود الأدمن (كود الأدمن: lkgyud1) */
+const ADMIN_HASH="1bcd12a87c7a67e13dcaad47519263926eeaca2e822efb67a28282b6d2f53ecd";
+/* ============================================ */
+
+const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app);
+const SECTIONS={chat:"💬 الشات",logic:"شروحات منطق",physics:"شروحات فيزياء",philo:"شروحات فلسفة",religion:"شروحات دين",critique:"نقود لأفكار خاطئة",apply:"التقديم على الإدارة"};
+let user=null,profile=null,unsub=null,cur="chat";
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const isAdmin=()=>profile&&profile.admin;
+const shown=p=>p.name+(p.admin?" [admin]":"");
+
+window.loginG=async()=>{try{await signInWithPopup(auth,new GoogleAuthProvider())}catch(e){$("lerr").textContent="فشل تسجيل الدخول: "+(e.code||e.message)}};
+window.logout=()=>signOut(auth);
+
+onAuthStateChanged(auth,async u=>{
+ user=u;
+ if(!u){profile=null;$("login").classList.remove("hide");["side","main"].forEach(i=>$(i).classList.add("hide"));$("step1").classList.remove("hide");$("step2").classList.add("hide");return}
+ const ban=await getDoc(doc(db,"bans",u.uid));
+ if(ban.exists()){$("lerr").textContent="هذا الحساب محظور من الموقع";return signOut(auth)}
+ const p=await getDoc(doc(db,"users",u.uid));
+ if(!p.exists()){$("step1").classList.add("hide");$("step2").classList.remove("hide");$("login").classList.remove("hide");return}
+ profile=p.data();start();
+});
+
+window.saveName=async()=>{
+ const n=$("nm").value.trim();
+ if(!/^[\p{L}]+(\s[\p{L}]+)*$/u.test(n)||n.length<2){$("lerr").textContent="الاسم لازم حروف فقط بدون رموز أو أرقام";return}
+ const k=n.toLowerCase().replace(/\s+/g,"_");
+ const ex=await getDoc(doc(db,"names",k));
+ if(ex.exists()&&ex.data().uid!==user.uid){$("lerr").textContent="الاسم مستخدم";return}
+ await setDoc(doc(db,"names",k),{uid:user.uid});
+ profile={name:n,admin:false};
+ await setDoc(doc(db,"users",user.uid),profile);
+ $("lerr").textContent="";start();
+};
+
+async function sha(s){const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(s));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}
+window.useCode=async()=>{
+ if(await sha($("code").value.trim())!==ADMIN_HASH)return alert("الكود غلط");
+ profile.admin=true;await setDoc(doc(db,"users",user.uid),profile);$("code").value="";start();
+};
+
+function start(){
+ $("login").classList.add("hide");$("side").classList.remove("hide");$("main").classList.remove("hide");
+ $("meName").textContent=shown(profile);$("meRole").textContent=isAdmin()?"إدارة":"عضو";
+ $("nav").innerHTML=Object.entries(SECTIONS).map(([k,v])=>`<a data-k="${k}" class="${k===cur?"on":""}">${v}</a>`).join("");
+ $("nav").querySelectorAll("a").forEach(a=>a.onclick=()=>{cur=a.dataset.k;start()});
+ render();
+}
+
+function render(){
+ if(unsub){unsub();unsub=null}
+ if(cur==="chat")return chatView();
+ if(cur==="apply")return applyView();
+ lessonsView();
+}
+
+/* ===== الشات ===== */
+function chatView(){
+ $("main").innerHTML=`<div class="card"><h2>الشات العام</h2><div id="msgs"></div>
+ <div style="display:flex;gap:8px"><input id="mi" placeholder="اكتب رسالتك..." style="margin:0"><button id="ms">إرسال</button></div><p class="err" id="ce"></p></div>`;
+ $("ms").onclick=send;$("mi").onkeydown=e=>{if(e.key==="Enter")send()};
+ unsub=onSnapshot(query(collection(db,"messages"),orderBy("createdAt","desc"),limit(100)),s=>{
+  const box=$("msgs");if(!box)return;
+  box.innerHTML=s.docs.reverse().map(d=>{const m=d.data();
+   const tools=isAdmin()&&m.uid!==user.uid?`<div class="t"><button class="s r" data-a="del" data-id="${d.id}">حذف</button><button class="s" data-a="to" data-u="${m.uid}">تايم أوت 10د</button><button class="s r" data-a="ban" data-u="${m.uid}">تبنيد</button></div>`:(isAdmin()?`<div class="t"><button class="s r" data-a="del" data-id="${d.id}">حذف</button></div>`:"");
+   return `<div class="m"><div class="n">${esc(m.name)}</div>${esc(m.text)}${tools}</div>`}).join("");
+  box.scrollTop=box.scrollHeight;
+  box.querySelectorAll("button").forEach(b=>b.onclick=()=>adminAct(b.dataset));
+ });
+}
+async function send(){
+ const t=$("mi").value.trim();if(!t)return;
+ const to=await getDoc(doc(db,"timeouts",user.uid));
+ if(to.exists()&&to.data().until>Date.now()){$("ce").textContent="أنت في تايم أوت لمدة "+Math.ceil((to.data().until-Date.now())/60000)+" دقيقة";return}
+ $("ce").textContent="";$("mi").value="";
+ await addDoc(collection(db,"messages"),{uid:user.uid,name:shown(profile),text:t.slice(0,500),createdAt:serverTimestamp()});
+}
+async function adminAct(d){
+ if(!isAdmin())return;
+ if(d.a==="del")await deleteDoc(doc(db,"messages",d.id));
+ if(d.a==="to")await setDoc(doc(db,"timeouts",d.u),{until:Date.now()+600000});
+ if(d.a==="ban"&&confirm("تبنيد هذا الشخص نهائيًا؟"))await setDoc(doc(db,"bans",d.u),{by:user.uid});
+}
+
+/* ===== الدروس ===== */
+function lessonsView(){
+ $("main").innerHTML=`<div class="card"><h2>${SECTIONS[cur]}</h2><div id="ls">جاري التحميل...</div></div>
+ ${isAdmin()?`<div class="card"><h3>إضافة درس</h3><input id="lt" placeholder="اسم الدرس"><textarea id="lc" rows="6" placeholder="محتوى الدرس"></textarea><button id="la">إضافة</button></div>`:""}`;
+ if(isAdmin())$("la").onclick=async()=>{
+  const t=$("lt").value.trim(),c=$("lc").value.trim();if(!t||!c)return;
+  await addDoc(collection(db,"lessons"),{section:cur,title:t,content:c,createdAt:Date.now()});
+  $("lt").value=$("lc").value="";
+ };
+ unsub=onSnapshot(query(collection(db,"lessons"),where("section","==",cur)),s=>{
+  const ds=s.docs.sort((a,b)=>a.data().createdAt-b.data().createdAt);
+  $("ls").innerHTML=ds.length?ds.map((d,i)=>`<div class="lesson" data-id="${d.id}"><b>الدرس ${i+1}:</b> ${esc(d.data().title)}${isAdmin()?` <button class="s r" data-del="${d.id}" style="float:left">حذف</button>`:""}</div>`).join(""):"لا توجد دروس بعد";
+  $("ls").querySelectorAll(".lesson").forEach(el=>el.onclick=e=>{
+   if(e.target.dataset.del){deleteDoc(doc(db,"lessons",e.target.dataset.del));return}
+   openLesson(ds.find(d=>d.id===el.dataset.id).data());
+  });
+ });
+}
+function openLesson(l){
+ const ov=document.createElement("div");ov.className="ov";
+ ov.innerHTML=`<div class="box"><h3>إعلان</h3><div class="ad">مساحة إعلانية<br>الدرس يبدأ بعد <span id="cd">15</span> ثانية</div><small>الإعلان يدعم فريق العمل 💙</small></div>`;
+ document.body.appendChild(ov);
+ let s=15;const iv=setInterval(()=>{s--;ov.querySelector("#cd").textContent=s;
+  if(s<=0){clearInterval(iv);ov.innerHTML=`<div class="box" style="max-width:700px;text-align:right;max-height:85vh;overflow:auto"><h2>${esc(l.title)}</h2><div style="white-space:pre-wrap;line-height:1.9">${esc(l.content)}</div><br><button id="cl">إغلاق</button></div>`;ov.querySelector("#cl").onclick=()=>ov.remove()}
+ },1000);
+}
+
+/* ===== التقديم على الإدارة ===== */
+async function applyView(){
+ const qd=await getDoc(doc(db,"config","questions"));
+ const Q=qd.exists()?qd.data().list:[];
+ const mine=await getDoc(doc(db,"applications",user.uid));
+ const ST={pending:"قيد المراجعة ⏳",accepted:"مقبول ✅",rejected:"مرفوض ❌"};
+ let h=`<div class="card"><h2>التقديم على الإدارة</h2>`;
+ if(mine.exists()){const a=mine.data();h+=`<p><b>حالة طلبك:</b> ${ST[a.status]}</p>${a.reply?`<div class="m"><div class="n">رد الإدارة</div>${esc(a.reply)}</div><br>`:""}`}
+ if(!Q.length)h+=`<p>لا توجد أسئلة حالياً، حاول لاحقاً.</p>`;
+ else h+=`<p>أجب عن الأسئلة التالية:</p>`+Q.map((q,i)=>`<p><b>${i+1}. ${esc(q)}</b></p><textarea class="qa" rows="3"></textarea>`).join("")+`<button id="as">${mine.exists()?"إعادة الإرسال":"إرسال الطلب"}</button><p class="err" id="ae"></p>`;
+ h+=`</div>`;
+ if(isAdmin())h+=`<div class="card"><h3>أسئلة التقديم (سؤال في كل سطر)</h3><textarea id="qe" rows="6">${esc(Q.join("\n"))}</textarea><button id="qs">حفظ الأسئلة</button></div><div class="card"><h3>الطلبات المقدمة</h3><div id="al">...</div></div>`;
+ $("main").innerHTML=h;
+ if($("as"))$("as").onclick=async()=>{
+  const as=[...document.querySelectorAll(".qa")].map(t=>t.value.trim());
+  if(as.some(a=>!a)){$("ae").textContent="جاوب على كل الأسئلة";return}
+  await setDoc(doc(db,"applications",user.uid),{uid:user.uid,name:profile.name,answers:Q.map((q,i)=>({q,a:as[i]})),status:"pending",reply:"",createdAt:Date.now()});
+  applyView();
+ };
+ if(!isAdmin())return;
+ $("qs").onclick=async()=>{await setDoc(doc(db,"config","questions"),{list:$("qe").value.split("\n").map(s=>s.trim()).filter(Boolean)});applyView()};
+ const s=await getDocs(collection(db,"applications"));
+ $("al").innerHTML=s.docs.map(d=>{const a=d.data();return `<div class="m" style="margin-bottom:10px"><div class="n">${esc(a.name)} — ${ST[a.status]}</div>${(a.answers||[]).map(x=>`<p><b>${esc(x.q)}</b><br>${esc(x.a)}</p>`).join("")}<textarea id="r_${d.id}" rows="2" placeholder="اكتب ردك للمتقدم (مثلاً الكود أو سبب الرفض)">${esc(a.reply||"")}</textarea><button class="s" data-id="${d.id}" data-st="accepted">قبول</button> <button class="s r" data-id="${d.id}" data-st="rejected">رفض</button></div>`}).join("")||"لا توجد طلبات";
+ $("al").querySelectorAll("button").forEach(b=>b.onclick=async()=>{
+  await setDoc(doc(db,"applications",b.dataset.id),{status:b.dataset.st,reply:$("r_"+b.dataset.id).value.trim()},{merge:true});applyView();
+ });
+}
+</script>
+</body>
+</html>
