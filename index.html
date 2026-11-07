@@ -70,7 +70,7 @@ input,textarea{width:100%;padding:10px;border:1px solid var(--bd);border-radius:
 
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import {getAuth,GoogleAuthProvider,signInWithPopup,onAuthStateChanged,signOut} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import {getAuth,GoogleAuthProvider,signInWithPopup,signInWithRedirect,onAuthStateChanged,signOut} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import {getFirestore,doc,getDoc,setDoc,deleteDoc,addDoc,collection,query,orderBy,limit,where,onSnapshot,getDocs,serverTimestamp} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 /* ====== ضع إعدادات Firebase بتاعتك هنا ====== */
@@ -87,7 +87,22 @@ const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"
 const isAdmin=()=>profile&&profile.admin;
 const shown=p=>p.name+(p.admin?" [admin]":"");
 
-window.loginG=async()=>{try{await signInWithPopup(auth,new GoogleAuthProvider())}catch(e){$("lerr").textContent="فشل تسجيل الدخول: "+(e.code||e.message)}};
+let busy=false;
+window.loginG=async()=>{
+ if(busy)return;busy=true;
+ const b=document.querySelector("#step1 button");b.disabled=true;$("lerr").textContent="";
+ const p=new GoogleAuthProvider(),mobile=/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
+ try{
+  if(mobile){await signInWithRedirect(auth,p);return}
+  await signInWithPopup(auth,p);
+ }catch(e){
+  if(["auth/cancelled-popup-request","auth/popup-blocked","auth/popup-closed-by-user"].includes(e.code)){
+   try{await signInWithRedirect(auth,p);return}catch(e2){e=e2}
+  }
+  $("lerr").textContent="فشل تسجيل الدخول: "+(e.code||e.message);
+ }
+ busy=false;b.disabled=false;
+};
 window.logout=()=>signOut(auth);
 
 onAuthStateChanged(auth,async u=>{
