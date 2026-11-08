@@ -77,6 +77,7 @@ import {getFirestore,doc,getDoc,setDoc,deleteDoc,addDoc,collection,query,orderBy
 const firebaseConfig={apiKey:"AIzaSyBk-KXQJ-Wuflr-2ZQsxaFN9jEQfXmlClc",authDomain:"share-f150c.firebaseapp.com",projectId:"share-f150c",storageBucket:"share-f150c.firebasestorage.app",messagingSenderId:"861894276415",appId:"1:861894276415:web:1e653659b2b6d10e1f4f8a"};
 /* هاش SHA-256 لكود الأدمن (كود الأدمن: lkgyud1) */
 const ADMIN_HASH="1bcd12a87c7a67e13dcaad47519263926eeaca2e822efb67a28282b6d2f53ecd";
+const OWNER_HASH="d1f14c1d56a3c20c2aa77ac2a28e514f3a3ed8499dd282934e352fe073e55047";
 /* ============================================ */
 
 const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app);
@@ -85,7 +86,7 @@ let user=null,profile=null,unsub=null,cur="chat";
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const isAdmin=()=>profile&&profile.admin;
-const shown=p=>p.name+(p.admin?" [admin]":"");
+const shown=p=>p.name+(p.owner?" [owner]":p.admin?" [admin]":"");
 
 let busy=false;
 window.loginG=async()=>{
@@ -109,8 +110,8 @@ onAuthStateChanged(auth,async u=>{
  user=u;
  if(!u){profile=null;$("login").classList.remove("hide");["side","main"].forEach(i=>$(i).classList.add("hide"));$("step1").classList.remove("hide");$("step2").classList.add("hide");return}
  const ban=await getDoc(doc(db,"bans",u.uid));
- if(ban.exists()){$("lerr").textContent="هذا الحساب محظور من الموقع";return signOut(auth)}
  const p=await getDoc(doc(db,"users",u.uid));
+ if(ban.exists()&&!(p.exists()&&p.data().owner)){$("lerr").textContent="هذا الحساب محظور من الموقع";return signOut(auth)}
  if(!p.exists()){$("step1").classList.add("hide");$("step2").classList.remove("hide");$("login").classList.remove("hide");return}
  profile=p.data();start();
 });
@@ -129,13 +130,16 @@ window.saveName=async()=>{
 
 async function sha(s){const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(s));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}
 window.useCode=async()=>{
- if(await sha($("code").value.trim())!==ADMIN_HASH)return alert("الكود غلط");
- profile.admin=true;await setDoc(doc(db,"users",user.uid),profile);$("code").value="";start();
+ const h=await sha($("code").value.trim());
+ if(h===OWNER_HASH){profile.owner=true;profile.admin=true}
+ else if(h===ADMIN_HASH){profile.admin=true}
+ else return alert("الكود غلط");
+ await setDoc(doc(db,"users",user.uid),profile);$("code").value="";start();
 };
 
 function start(){
  $("login").classList.add("hide");$("side").classList.remove("hide");$("main").classList.remove("hide");
- $("meName").textContent=shown(profile);$("meRole").textContent=isAdmin()?"إدارة":"عضو";
+ $("meName").textContent=shown(profile);$("meRole").textContent=profile.owner?"مالك الموقع":isAdmin()?"إدارة":"عضو";
  $("nav").innerHTML=Object.entries(SECTIONS).map(([k,v])=>`<a data-k="${k}" class="${k===cur?"on":""}">${v}</a>`).join("");
  $("nav").querySelectorAll("a").forEach(a=>a.onclick=()=>{cur=a.dataset.k;start()});
  render();
@@ -156,7 +160,8 @@ function chatView(){
  unsub=onSnapshot(query(collection(db,"messages"),orderBy("createdAt","desc"),limit(100)),s=>{
   const box=$("msgs");if(!box)return;
   box.innerHTML=s.docs.reverse().map(d=>{const m=d.data();
-   const tools=isAdmin()&&m.uid!==user.uid?`<div class="t"><button class="s r" data-a="del" data-id="${d.id}">حذف</button><button class="s" data-a="to" data-u="${m.uid}">تايم أوت 10د</button><button class="s r" data-a="ban" data-u="${m.uid}">تبنيد</button></div>`:(isAdmin()?`<div class="t"><button class="s r" data-a="del" data-id="${d.id}">حذف</button></div>`:"");
+   const own=m.uid===user.uid;
+   const tools=!isAdmin()?"":(m.owner&&!own)?"":own?`<div class="t"><button class="s r" data-a="del" data-id="${d.id}">حذف</button></div>`:`<div class="t"><button class="s r" data-a="del" data-id="${d.id}">حذف</button><button class="s" data-a="to" data-u="${m.uid}">تايم أوت 10د</button><button class="s" data-a="un" data-u="${m.uid}">إزالة التايم أوت</button><button class="s r" data-a="ban" data-u="${m.uid}">تبنيد</button></div>`;
    return `<div class="m"><div class="n">${esc(m.name)}</div>${esc(m.text)}${tools}</div>`}).join("");
   box.scrollTop=box.scrollHeight;
   box.querySelectorAll("button").forEach(b=>b.onclick=()=>adminAct(b.dataset));
@@ -165,14 +170,16 @@ function chatView(){
 async function send(){
  const t=$("mi").value.trim();if(!t)return;
  const to=await getDoc(doc(db,"timeouts",user.uid));
- if(to.exists()&&to.data().until>Date.now()){$("ce").textContent="أنت في تايم أوت لمدة "+Math.ceil((to.data().until-Date.now())/60000)+" دقيقة";return}
+ if(!profile.owner&&to.exists()&&to.data().until>Date.now()){$("ce").textContent="أنت في تايم أوت لمدة "+Math.ceil((to.data().until-Date.now())/60000)+" دقيقة";return}
  $("ce").textContent="";$("mi").value="";
- await addDoc(collection(db,"messages"),{uid:user.uid,name:shown(profile),text:t.slice(0,500),createdAt:serverTimestamp()});
+ await addDoc(collection(db,"messages"),{uid:user.uid,name:shown(profile),owner:!!profile.owner,text:t.slice(0,500),createdAt:serverTimestamp()});
 }
 async function adminAct(d){
  if(!isAdmin())return;
+ if(d.u){const t=await getDoc(doc(db,"users",d.u));if(t.exists()&&t.data().owner)return alert("لا يمكن تنفيذ هذا الإجراء على مالك الموقع")}
  if(d.a==="del")await deleteDoc(doc(db,"messages",d.id));
- if(d.a==="to")await setDoc(doc(db,"timeouts",d.u),{until:Date.now()+600000});
+ if(d.a==="to"){await setDoc(doc(db,"timeouts",d.u),{until:Date.now()+600000});alert("تم إعطاء تايم أوت 10 دقائق")}
+ if(d.a==="un"){await deleteDoc(doc(db,"timeouts",d.u));alert("تمت إزالة التايم أوت")}
  if(d.a==="ban"&&confirm("تبنيد هذا الشخص نهائيًا؟"))await setDoc(doc(db,"bans",d.u),{by:user.uid});
 }
 
