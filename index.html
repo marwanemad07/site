@@ -108,6 +108,9 @@ const OWNER_HASH="d1f14c1d56a3c20c2aa77ac2a28e514f3a3ed8499dd282934e352fe073e550
 const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app);
 const SECTIONS={home:"🏠 الرئيسية",chat:"💬 الشات",logic:"شروحات منطق",physics:"شروحات فيزياء",philo:"شروحات فلسفة",religion:"شروحات دين",critique:"نقود لأفكار خاطئة",apply:"التقديم على الإدارة",bans:"المحظورون",admins:"إدارة الأدمن"};
 let user=null,profile=null,unsub=null,cur="home";
+const SUBS={religion:{aqeeda:["العقيدة","☝️"],fiqh:["الفقه","⚖️"],tafsir:["التفسير","📖"],hadith:["الحديث","📜"],seerah:["السيرة","🌙"]}};
+const secTitle=c=>{const[p,k]=c.split(":");return k&&SUBS[p]&&SUBS[p][k]?SECTIONS[p].replace(/^[^\p{L}]+/u,"")+" ‹ "+SUBS[p][k][0]:SECTIONS[c]};
+const backBtn=c=>c.includes(":")?`<button class="s" id="bk">← رجوع</button> `:"";
 const ICONS={chat:"💬",logic:"🧠",physics:"⚛️",philo:"📚",religion:"🕌",critique:"🔎",apply:"📝",bans:"🚫",admins:"👑"};
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -169,7 +172,7 @@ function start(){
  $("side").classList.remove("open");
  $("login").classList.add("hide");$("side").classList.remove("hide");$("main").classList.remove("hide");
  $("meName").textContent=shown(profile);$("meRole").textContent=profile.owner?"مالك الموقع":isAdmin()?"إدارة":"عضو";
- $("nav").innerHTML=Object.entries(SECTIONS).filter(([k])=>vis(k)).map(([k,v])=>`<a data-k="${k}" class="${k===cur?"on":""}">${v}</a>`).join("");
+ $("nav").innerHTML=Object.entries(SECTIONS).filter(([k])=>vis(k)).map(([k,v])=>`<a data-k="${k}" class="${k===cur||cur.startsWith(k+":")?"on":""}">${v}</a>`).join("");
  $("nav").querySelectorAll("a").forEach(a=>a.onclick=()=>{cur=a.dataset.k;start()});
  render();
 }
@@ -177,11 +180,19 @@ function start(){
 function render(){
  if(unsub){unsub();unsub=null}
  if(cur==="home")return homeView();
+ if(SUBS[cur])return subView();
  if(cur==="admins")return adminsView();
  if(cur==="chat")return chatView();
  if(cur==="apply")return applyView();
  if(cur==="bans")return bansView();
  lessonsView();
+}
+
+/* ===== الأقسام الفرعية ===== */
+function subView(){
+ $("main").innerHTML=`<button class="s" id="bk">← الرئيسية</button><h2>${SECTIONS[cur].replace(/^[^\p{L}]+/u,"")}</h2><div class="grid">`+Object.entries(SUBS[cur]).map(([k,v])=>`<div class="tile" data-k="${cur}:${k}"><span class="ic">${v[1]}</span>${v[0]}</div>`).join("")+`</div>`;
+ $("bk").onclick=()=>{cur="home";start()};
+ $("main").querySelectorAll(".tile").forEach(t=>t.onclick=()=>{cur=t.dataset.k;start()});
 }
 
 /* ===== الرئيسية ===== */
@@ -237,8 +248,9 @@ async function adminAct(d){
 
 /* ===== الدروس ===== */
 function lessonsView(){
- $("main").innerHTML=`<div class="card"><h2>${SECTIONS[cur]}</h2><div id="ls">جاري التحميل...</div></div>
+ $("main").innerHTML=`<div class="card">${backBtn(cur)}<h2>${secTitle(cur)}</h2><div id="ls">جاري التحميل...</div></div>
  ${isAdmin()?`<div class="card"><h3>إضافة درس</h3><input id="lt" placeholder="اسم الدرس"><textarea id="lc" rows="6" placeholder="محتوى الدرس"></textarea><button id="la">إضافة</button></div>`:""}`;
+ if($("bk"))$("bk").onclick=()=>{cur=cur.split(":")[0];start()};
  if(isAdmin())$("la").onclick=async()=>{
   const t=$("lt").value.trim(),c=$("lc").value.trim();if(!t||!c)return;
   await addDoc(collection(db,"lessons"),{section:cur,title:t,content:c,createdAt:Date.now()});
