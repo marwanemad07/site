@@ -111,7 +111,7 @@ onAuthStateChanged(auth,async u=>{
  if(!u){profile=null;$("login").classList.remove("hide");["side","main"].forEach(i=>$(i).classList.add("hide"));$("step1").classList.remove("hide");$("step2").classList.add("hide");return}
  const ban=await getDoc(doc(db,"bans",u.uid));
  const p=await getDoc(doc(db,"users",u.uid));
- if(ban.exists()&&!(p.exists()&&(p.data().owner||p.data().admin))){$("lerr").textContent="هذا الحساب محظور من الموقع";return signOut(auth)}
+ if(ban.exists()&&!(p.exists()&&p.data().owner)){$("lerr").textContent="هذا الحساب محظور من الموقع";return signOut(auth)}
  if(!p.exists()){$("step1").classList.add("hide");$("step2").classList.remove("hide");$("login").classList.remove("hide");return}
  profile=p.data();start();
 });
@@ -162,7 +162,7 @@ function chatView(){
   const box=$("msgs");if(!box)return;
   box.innerHTML=s.docs.reverse().map(d=>{const m=d.data();
    const own=m.uid===user.uid;
-   const tools=!isAdmin()?"":((m.owner||m.admin)&&!own)?"":own?`<div class="t"><button class="s r" data-a="del" data-id="${d.id}">حذف</button></div>`:`<div class="t"><button class="s r" data-a="del" data-id="${d.id}">حذف</button><button class="s" data-a="to" data-u="${m.uid}">تايم أوت 10د</button><button class="s" data-a="un" data-u="${m.uid}">إزالة التايم أوت</button><button class="s r" data-a="ban" data-u="${m.uid}">تبنيد</button></div>`;
+   const tools=!isAdmin()?"":((m.owner&&!own)||(m.admin&&!own&&!profile.owner))?"":own?`<div class="t"><button class="s r" data-a="del" data-id="${d.id}">حذف</button></div>`:`<div class="t"><button class="s r" data-a="del" data-id="${d.id}">حذف</button><button class="s" data-a="to" data-u="${m.uid}">تايم أوت 10د</button><button class="s" data-a="un" data-u="${m.uid}">إزالة التايم أوت</button><button class="s r" data-a="ban" data-u="${m.uid}">تبنيد</button><button class="s" data-a="unban" data-u="${m.uid}">فك التبنيد</button>${profile.owner&&m.admin?`<button class="s r" data-a="rm" data-u="${m.uid}">إزالة الأدمن</button>`:""}</div>`;
    return `<div class="m"><div class="n">${esc(m.name)}</div>${esc(m.text)}${tools}</div>`}).join("");
   box.scrollTop=box.scrollHeight;
   box.querySelectorAll("button").forEach(b=>b.onclick=()=>adminAct(b.dataset));
@@ -171,16 +171,18 @@ function chatView(){
 async function send(){
  const t=$("mi").value.trim();if(!t)return;
  const to=await getDoc(doc(db,"timeouts",user.uid));
- if(!isAdmin()&&to.exists()&&to.data().until>Date.now()){$("ce").textContent="أنت في تايم أوت لمدة "+Math.ceil((to.data().until-Date.now())/60000)+" دقيقة";return}
+ if(!profile.owner&&to.exists()&&to.data().until>Date.now()){$("ce").textContent="أنت في تايم أوت لمدة "+Math.ceil((to.data().until-Date.now())/60000)+" دقيقة";return}
  $("ce").textContent="";$("mi").value="";
  await addDoc(collection(db,"messages"),{uid:user.uid,name:shown(profile),owner:!!profile.owner,admin:!!profile.admin,text:t.slice(0,500),createdAt:serverTimestamp()});
 }
 async function adminAct(d){
  if(!isAdmin())return;
- if(d.u){const t=await getDoc(doc(db,"users",d.u));if(t.exists()&&(t.data().owner||t.data().admin))return alert("لا يمكن تنفيذ هذا الإجراء على أحد أعضاء الإدارة")}
+ if(d.u){const t=await getDoc(doc(db,"users",d.u));if(t.exists()){const x=t.data();if(x.owner)return alert("لا يمكن تنفيذ هذا الإجراء على مالك الموقع");if(x.admin&&!profile.owner)return alert("هذا الإجراء على الأدمن للمالك فقط")}}
  if(d.a==="del")await deleteDoc(doc(db,"messages",d.id));
  if(d.a==="to"){await setDoc(doc(db,"timeouts",d.u),{until:Date.now()+600000});alert("تم إعطاء تايم أوت 10 دقائق")}
  if(d.a==="un"){await deleteDoc(doc(db,"timeouts",d.u));alert("تمت إزالة التايم أوت")}
+ if(d.a==="rm"&&profile.owner&&confirm("إزالة صلاحية الأدمن عن هذا الشخص؟")){await setDoc(doc(db,"users",d.u),{admin:false},{merge:true});alert("تمت إزالة الأدمن")}
+ if(d.a==="unban"){await deleteDoc(doc(db,"bans",d.u));alert("تم فك التبنيد")}
  if(d.a==="ban"&&confirm("تبنيد هذا الشخص نهائيًا؟"))await setDoc(doc(db,"bans",d.u),{by:user.uid});
 }
 
