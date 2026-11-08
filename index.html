@@ -81,7 +81,7 @@ const OWNER_HASH="d1f14c1d56a3c20c2aa77ac2a28e514f3a3ed8499dd282934e352fe073e550
 /* ============================================ */
 
 const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app);
-const SECTIONS={chat:"💬 الشات",logic:"شروحات منطق",physics:"شروحات فيزياء",philo:"شروحات فلسفة",religion:"شروحات دين",critique:"نقود لأفكار خاطئة",apply:"التقديم على الإدارة"};
+const SECTIONS={chat:"💬 الشات",logic:"شروحات منطق",physics:"شروحات فيزياء",philo:"شروحات فلسفة",religion:"شروحات دين",critique:"نقود لأفكار خاطئة",apply:"التقديم على الإدارة",bans:"المحظورون"};
 let user=null,profile=null,unsub=null,cur="chat";
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -111,7 +111,7 @@ onAuthStateChanged(auth,async u=>{
  if(!u){profile=null;$("login").classList.remove("hide");["side","main"].forEach(i=>$(i).classList.add("hide"));$("step1").classList.remove("hide");$("step2").classList.add("hide");return}
  const ban=await getDoc(doc(db,"bans",u.uid));
  const p=await getDoc(doc(db,"users",u.uid));
- if(ban.exists()&&!(p.exists()&&p.data().owner)){$("lerr").textContent="هذا الحساب محظور من الموقع";return signOut(auth)}
+ if(ban.exists()&&!(p.exists()&&(p.data().owner||p.data().admin))){$("lerr").textContent="هذا الحساب محظور من الموقع";return signOut(auth)}
  if(!p.exists()){$("step1").classList.add("hide");$("step2").classList.remove("hide");$("login").classList.remove("hide");return}
  profile=p.data();start();
 });
@@ -140,7 +140,7 @@ window.useCode=async()=>{
 function start(){
  $("login").classList.add("hide");$("side").classList.remove("hide");$("main").classList.remove("hide");
  $("meName").textContent=shown(profile);$("meRole").textContent=profile.owner?"مالك الموقع":isAdmin()?"إدارة":"عضو";
- $("nav").innerHTML=Object.entries(SECTIONS).map(([k,v])=>`<a data-k="${k}" class="${k===cur?"on":""}">${v}</a>`).join("");
+ $("nav").innerHTML=Object.entries(SECTIONS).filter(([k])=>k!=="bans"||isAdmin()).map(([k,v])=>`<a data-k="${k}" class="${k===cur?"on":""}">${v}</a>`).join("");
  $("nav").querySelectorAll("a").forEach(a=>a.onclick=()=>{cur=a.dataset.k;start()});
  render();
 }
@@ -149,6 +149,7 @@ function render(){
  if(unsub){unsub();unsub=null}
  if(cur==="chat")return chatView();
  if(cur==="apply")return applyView();
+ if(cur==="bans")return bansView();
  lessonsView();
 }
 
@@ -161,7 +162,7 @@ function chatView(){
   const box=$("msgs");if(!box)return;
   box.innerHTML=s.docs.reverse().map(d=>{const m=d.data();
    const own=m.uid===user.uid;
-   const tools=!isAdmin()?"":(m.owner&&!own)?"":own?`<div class="t"><button class="s r" data-a="del" data-id="${d.id}">حذف</button></div>`:`<div class="t"><button class="s r" data-a="del" data-id="${d.id}">حذف</button><button class="s" data-a="to" data-u="${m.uid}">تايم أوت 10د</button><button class="s" data-a="un" data-u="${m.uid}">إزالة التايم أوت</button><button class="s r" data-a="ban" data-u="${m.uid}">تبنيد</button></div>`;
+   const tools=!isAdmin()?"":((m.owner||m.admin)&&!own)?"":own?`<div class="t"><button class="s r" data-a="del" data-id="${d.id}">حذف</button></div>`:`<div class="t"><button class="s r" data-a="del" data-id="${d.id}">حذف</button><button class="s" data-a="to" data-u="${m.uid}">تايم أوت 10د</button><button class="s" data-a="un" data-u="${m.uid}">إزالة التايم أوت</button><button class="s r" data-a="ban" data-u="${m.uid}">تبنيد</button></div>`;
    return `<div class="m"><div class="n">${esc(m.name)}</div>${esc(m.text)}${tools}</div>`}).join("");
   box.scrollTop=box.scrollHeight;
   box.querySelectorAll("button").forEach(b=>b.onclick=()=>adminAct(b.dataset));
@@ -170,13 +171,13 @@ function chatView(){
 async function send(){
  const t=$("mi").value.trim();if(!t)return;
  const to=await getDoc(doc(db,"timeouts",user.uid));
- if(!profile.owner&&to.exists()&&to.data().until>Date.now()){$("ce").textContent="أنت في تايم أوت لمدة "+Math.ceil((to.data().until-Date.now())/60000)+" دقيقة";return}
+ if(!isAdmin()&&to.exists()&&to.data().until>Date.now()){$("ce").textContent="أنت في تايم أوت لمدة "+Math.ceil((to.data().until-Date.now())/60000)+" دقيقة";return}
  $("ce").textContent="";$("mi").value="";
- await addDoc(collection(db,"messages"),{uid:user.uid,name:shown(profile),owner:!!profile.owner,text:t.slice(0,500),createdAt:serverTimestamp()});
+ await addDoc(collection(db,"messages"),{uid:user.uid,name:shown(profile),owner:!!profile.owner,admin:!!profile.admin,text:t.slice(0,500),createdAt:serverTimestamp()});
 }
 async function adminAct(d){
  if(!isAdmin())return;
- if(d.u){const t=await getDoc(doc(db,"users",d.u));if(t.exists()&&t.data().owner)return alert("لا يمكن تنفيذ هذا الإجراء على مالك الموقع")}
+ if(d.u){const t=await getDoc(doc(db,"users",d.u));if(t.exists()&&(t.data().owner||t.data().admin))return alert("لا يمكن تنفيذ هذا الإجراء على أحد أعضاء الإدارة")}
  if(d.a==="del")await deleteDoc(doc(db,"messages",d.id));
  if(d.a==="to"){await setDoc(doc(db,"timeouts",d.u),{until:Date.now()+600000});alert("تم إعطاء تايم أوت 10 دقائق")}
  if(d.a==="un"){await deleteDoc(doc(db,"timeouts",d.u));alert("تمت إزالة التايم أوت")}
@@ -208,6 +209,16 @@ function openLesson(l){
  if(isAdmin()){show();return}
  ov.innerHTML=`<div class="box"><h3>إعلان</h3><div class="ad">مساحة إعلانية<br>الدرس يبدأ بعد <span id="cd">15</span> ثانية</div><small>الإعلان يدعم فريق العمل 💙</small></div>`;
  let s=15;const iv=setInterval(()=>{s--;ov.querySelector("#cd").textContent=s;if(s<=0){clearInterval(iv);show()}},1000);
+}
+
+/* ===== المحظورون ===== */
+async function bansView(){
+ if(!isAdmin())return;
+ $("main").innerHTML=`<div class="card"><h2>المحظورون</h2><div id="bl">جاري التحميل...</div></div>`;
+ const s=await getDocs(collection(db,"bans"));
+ const rows=await Promise.all(s.docs.map(async d=>{const u=await getDoc(doc(db,"users",d.id));return {id:d.id,name:u.exists()?u.data().name:d.id}}));
+ $("bl").innerHTML=rows.length?rows.map(r=>`<div class="lesson" style="cursor:default">${esc(r.name)} <button class="s" data-id="${r.id}" style="float:left">فك الحظر</button></div>`).join(""):"لا يوجد محظورون";
+ $("bl").querySelectorAll("button").forEach(b=>b.onclick=async()=>{await deleteDoc(doc(db,"bans",b.dataset.id));bansView()});
 }
 
 /* ===== التقديم على الإدارة ===== */
