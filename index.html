@@ -66,7 +66,8 @@ main{padding-top:88px}
 </head>
 <body>
 
-<div id="login">
+<div id="boot" style="position:fixed;inset:0;background:#f7f4e6;display:flex;align-items:center;justify-content:center;z-index:30;font-size:18px;color:#4f7a3a">جاري التحميل...</div>
+<div id="login" class="hide">
  <div class="card">
   <h2>منصة الشروحات</h2>
   <div id="step1"><p>سجّل دخولك بحساب جوجل</p><button onclick="loginG()">الدخول بجيميل</button></div>
@@ -95,7 +96,7 @@ main{padding-top:88px}
 
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import {getAuth,GoogleAuthProvider,signInWithPopup,signInWithRedirect,onAuthStateChanged,signOut} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import {getAuth,GoogleAuthProvider,signInWithPopup,signInWithRedirect,onAuthStateChanged,signOut,setPersistence,browserLocalPersistence} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import {getFirestore,doc,getDoc,setDoc,deleteDoc,addDoc,collection,query,orderBy,limit,where,onSnapshot,getDocs,serverTimestamp} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 /* ====== ضع إعدادات Firebase بتاعتك هنا ====== */
@@ -106,6 +107,7 @@ const OWNER_HASH="d1f14c1d56a3c20c2aa77ac2a28e514f3a3ed8499dd282934e352fe073e550
 /* ============================================ */
 
 const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app);
+setPersistence(auth,browserLocalPersistence).catch(()=>{});
 const SECTIONS={home:"🏠 الرئيسية",chat:"💬 الشات",logic:"شروحات منطق",physics:"شروحات فيزياء",philo:"شروحات فلسفة",religion:"شروحات دين",critique:"نقود لأفكار خاطئة",apply:"التقديم على الإدارة",bans:"المحظورون",admins:"إدارة الأدمن"};
 let user=null,profile=null,unsub=null,cur="home";
 const SUBS={religion:{aqeeda:["العقيدة","☝️"],fiqh:["الفقه","⚖️"],tafsir:["التفسير","📖"],hadith:["الحديث","📜"],seerah:["السيرة","🌙"]}};
@@ -138,6 +140,7 @@ window.loginG=async()=>{
 window.logout=()=>signOut(auth);
 
 onAuthStateChanged(auth,async u=>{
+ $("boot").classList.add("hide");
  user=u;
  if(!u){profile=null;$("login").classList.remove("hide");["side","main"].forEach(i=>$(i).classList.add("hide"));$("step1").classList.remove("hide");$("step2").classList.add("hide");return}
  const ban=await getDoc(doc(db,"bans",u.uid));
