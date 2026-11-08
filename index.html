@@ -62,6 +62,9 @@ main{padding-top:88px}
 .tile .ic{font-size:46px;display:block;margin-bottom:10px}
 .tile:hover{box-shadow:0 4px 16px #0002}
 @media(max-width:700px){#menu{display:block}#side{position:fixed;top:64px;bottom:0;width:260px;right:-280px;transition:right .25s}#side.open{right:0}main{margin:0}body{display:block}.grid{grid-template-columns:repeat(2,1fr)}}
+.rq{background:#e9f0e0;border-right:3px solid var(--pri);border-radius:6px;padding:4px 8px;margin-bottom:4px;font-size:12px;color:var(--mut);cursor:pointer}
+.tm{font-weight:normal;color:var(--mut);font-size:11px;margin-right:6px}
+.rb{background:#e9f0e0;border-right:3px solid var(--pri);padding:6px 10px;border-radius:6px;margin-bottom:6px;font-size:13px}
 </style>
 </head>
 <body>
@@ -217,18 +220,27 @@ async function adminsView(){
 }
 
 /* ===== الشات ===== */
+let replyTo=null;
+const fmtTime=t=>{const d=(t&&t.toDate)?t.toDate():new Date(),n=new Date();const tm=d.toLocaleTimeString("ar-EG",{hour:"numeric",minute:"2-digit"});return d.toDateString()===n.toDateString()?tm:d.toLocaleDateString("ar-EG",{day:"numeric",month:"numeric"})+" "+tm};
+function showRb(){const rb=$("rb");if(!rb)return;if(!replyTo){rb.classList.add("hide");return}rb.classList.remove("hide");rb.innerHTML=`رد على <b>${esc(replyTo.name)}</b>: ${esc(replyTo.text.slice(0,60))} <button class="s" id="rx">✕ إلغاء</button>`;$("rx").onclick=()=>{replyTo=null;showRb()}}
 function chatView(){
+ replyTo=null;
  $("main").innerHTML=`<div class="card"><h2>الشات العام</h2><div id="msgs"></div>
+ <div id="rb" class="rb hide"></div>
  <div style="display:flex;gap:8px"><input id="mi" placeholder="اكتب رسالتك..." style="margin:0"><button id="ms">إرسال</button></div><p class="err" id="ce"></p></div>`;
  $("ms").onclick=send;$("mi").onkeydown=e=>{if(e.key==="Enter")send()};
  unsub=onSnapshot(query(collection(db,"messages"),orderBy("createdAt","desc"),limit(100)),s=>{
   const box=$("msgs");if(!box)return;
-  box.innerHTML=s.docs.reverse().map(d=>{const m=d.data();
+  const byId={};
+  box.innerHTML=s.docs.reverse().map(d=>{const m=d.data({serverTimestamps:"estimate"});byId[d.id]={id:d.id,name:m.name,text:m.text};
    const own=m.uid===user.uid;
    const tools=!isAdmin()?"":((m.owner&&!own)||(m.admin&&!own&&!profile.owner))?"":own?`<div class="t"><button class="s r" data-a="del" data-id="${d.id}">حذف</button></div>`:`<div class="t"><button class="s r" data-a="del" data-id="${d.id}">حذف</button><button class="s" data-a="to" data-u="${m.uid}">تايم أوت 10د</button><button class="s" data-a="un" data-u="${m.uid}">إزالة التايم أوت</button><button class="s r" data-a="ban" data-u="${m.uid}">تبنيد</button><button class="s" data-a="unban" data-u="${m.uid}">فك التبنيد</button>${profile.owner&&m.admin?`<button class="s r" data-a="rm" data-u="${m.uid}">إزالة الأدمن</button>`:""}</div>`;
-   return `<div class="m"><div class="n">${esc(m.name)}</div>${esc(m.text)}${tools}</div>`}).join("");
+   const rq=m.reply?`<div class="rq" data-go="${esc(m.reply.id||"")}"><b>${esc(m.reply.name)}</b>: ${esc(m.reply.text)}</div>`:"";
+   return `<div class="m" id="msg_${d.id}">${rq}<div class="n">${esc(m.name)} <span class="tm">${fmtTime(m.createdAt)}</span></div>${esc(m.text)}<div class="t"><button class="s" data-r="${d.id}">↩ رد</button></div>${tools}</div>`}).join("");
   box.scrollTop=box.scrollHeight;
-  box.querySelectorAll("button").forEach(b=>b.onclick=()=>adminAct(b.dataset));
+  box.querySelectorAll("button").forEach(b=>b.onclick=()=>{
+   if(b.dataset.r){replyTo=byId[b.dataset.r];showRb();$("mi").focus()}else adminAct(b.dataset)});
+  box.querySelectorAll(".rq").forEach(q=>q.onclick=()=>{const t=document.getElementById("msg_"+q.dataset.go);if(t){t.scrollIntoView({behavior:"smooth",block:"center"});t.style.outline="2px solid var(--pri)";setTimeout(()=>{t.style.outline=""},1500)}});
  });
 }
 async function send(){
@@ -236,7 +248,8 @@ async function send(){
  const to=await getDoc(doc(db,"timeouts",user.uid));
  if(!profile.owner&&to.exists()&&to.data().until>Date.now()){$("ce").textContent="أنت في تايم أوت لمدة "+Math.ceil((to.data().until-Date.now())/60000)+" دقيقة";return}
  $("ce").textContent="";$("mi").value="";
- await addDoc(collection(db,"messages"),{uid:user.uid,name:shown(profile),owner:!!profile.owner,admin:!!profile.admin,text:t.slice(0,500),createdAt:serverTimestamp()});
+ await addDoc(collection(db,"messages"),{uid:user.uid,name:shown(profile),owner:!!profile.owner,admin:!!profile.admin,text:t.slice(0,500),reply:replyTo?{id:replyTo.id,name:replyTo.name,text:replyTo.text.slice(0,80)}:null,createdAt:serverTimestamp()});
+ replyTo=null;showRb();
 }
 async function adminAct(d){
  if(!isAdmin())return;
